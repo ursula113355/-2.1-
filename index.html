@@ -1,0 +1,639 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Daily Words - 每日单词</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      --blue: #007AFF;
+      --red: #FF3B30;
+      --green: #34C759;
+      --bg-page: #F2F2F7;
+      --card-bg: #FFFFFF;
+      --ios-gray: #8E8E93;
+      --ios-separator: #C6C6C8;
+    }
+
+    body {
+      background-color: var(--bg-page);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      color: #000;
+      margin: 0;
+      overflow-x: hidden;
+    }
+
+    .ios-blur {
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      background: rgba(255, 255, 255, 0.8);
+    }
+
+    .safe-area-top { padding-top: env(safe-area-inset-top); }
+    .safe-area-bottom { padding-bottom: env(safe-area-inset-bottom); }
+
+    .perspective-1000 { perspective: 1000px; }
+    .preserve-3d { transform-style: preserve-3d; }
+    .backface-hidden { 
+      backface-visibility: hidden; 
+      -webkit-backface-visibility: hidden; 
+      background-color: white; 
+    }
+    .rotate-y-180 { transform: rotateY(180deg); }
+
+    .slide-up { animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+    @keyframes slideUp {
+      from { transform: translateY(100%); }
+      to { transform: translateY(0); }
+    }
+
+    .ios-shadow { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
+
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 1px;
+      background-color: var(--ios-separator);
+      border: 1px solid var(--ios-separator);
+    }
+
+    .sheet-overlay {
+      background-color: rgba(0,0,0,0.4);
+      transition: opacity 0.3s ease;
+    }
+
+    ::-webkit-scrollbar { display: none; }
+  </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/"
+  }
+}
+</script>
+</head>
+<body>
+  <div id="app" class="min-h-screen flex flex-col"></div>
+
+  <script>
+    // --- Data Models & State ---
+    const STORAGE_KEY = 'daily_words_v1';
+    const EBBINGHAUS_INTERVALS = [0, 1, 2, 4, 7, 15, 30];
+
+    let state = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {
+      wordLists: [],
+      reviewTasks: [],
+      view: 'home', 
+      calendarDate: new Date().toISOString(),
+      activeListId: null,
+      activeTaskId: null,
+      settings: {
+        autoTTS: true,
+        showWordFirst: true
+      }
+    };
+
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    const getTodayStr = () => new Date().toISOString().split('T')[0];
+    const addDays = (dateStr, days) => {
+      const d = new Date(dateStr);
+      d.setDate(d.getDate() + days);
+      return d.toISOString().split('T')[0];
+    };
+
+    async function autoTranslate(word) {
+      if (!word) return "";
+      try {
+        const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(word)}&langpair=en|zh-CN`);
+        const data = await res.json();
+        return data.responseData.translatedText;
+      } catch (e) {
+        console.error("Translation failed", e);
+        return "";
+      }
+    }
+
+    function createList(title, description, words) {
+      const listId = 'list_' + Date.now();
+      const newList = { id: listId, title, description, words, createdAt: Date.now() };
+      state.wordLists.push(newList);
+
+      const today = getTodayStr();
+      EBBINGHAUS_INTERVALS.forEach((interval, stage) => {
+        state.reviewTasks.push({
+          id: `task_${listId}_${stage}`,
+          listId: listId,
+          scheduledDate: addDays(today, interval),
+          status: 'pending',
+          type: stage === 0 ? 'study' : 'review',
+          stage: stage
+        });
+      });
+
+      saveState();
+      navigate('home');
+    }
+
+    function navigate(view, params = {}) {
+      state.view = view;
+      Object.assign(state, params);
+      saveState();
+      render();
+    }
+
+    function render() {
+      const app = document.getElementById('app');
+      app.innerHTML = '';
+      
+      switch(state.view) {
+        case 'home': renderHome(app); break;
+        case 'library': renderLibrary(app); break;
+        case 'add': renderAdd(app); break;
+        case 'study': renderStudy(app); break;
+      }
+      
+      if (state.view !== 'study') {
+        app.appendChild(createTabBar());
+      }
+    }
+
+    function renderHome(container) {
+      const d = new Date(state.calendarDate);
+      const year = d.getFullYear();
+      const month = d.getMonth();
+      const todayStr = getTodayStr();
+
+      const html = `
+        <div class="animate-in fade-in duration-300">
+          <header class="px-5 pt-10 pb-4 sticky top-0 bg-[#F2F2F7] z-40 border-b border-[#C6C6C8]/30">
+            <div class="flex items-center justify-between">
+              <button id="prevMonth" class="p-2 text-[#007AFF]"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M15 19l-7-7 7-7"/></svg></button>
+              <button id="resetDate" class="flex flex-col items-center">
+                <span class="text-lg font-bold">${year}年${month + 1}月</span>
+                <span class="text-[9px] font-black uppercase text-[#007AFF] tracking-wider">回到今日</span>
+              </button>
+              <div class="flex items-center">
+                <button id="nextMonth" class="p-2 text-[#007AFF]"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M9 5l7 7-7 7"/></svg></button>
+                <button id="addBtnTop" class="ml-2 p-2 text-[#007AFF]"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M12 4v16m8-8H4"/></svg></button>
+              </div>
+            </div>
+          </header>
+
+          <div class="grid grid-cols-7 px-4 mt-6 text-center text-[10px] font-bold text-[#8E8E93] uppercase">
+            <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+          </div>
+
+          <div class="calendar-grid mx-4 mt-2 rounded-2xl overflow-hidden bg-white ios-shadow">
+            ${generateCalendarCells(year, month)}
+          </div>
+
+          <div class="px-8 py-6 flex justify-between">
+             <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full bg-[#FF3B30]"></div><span class="text-[10px] text-[#8E8E93] font-bold">复习</span></div>
+             <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full bg-[#007AFF]"></div><span class="text-[10px] text-[#8E8E93] font-bold">新词</span></div>
+             <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full bg-[#34C759]"></div><span class="text-[10px] text-[#8E8E93] font-bold">完成</span></div>
+          </div>
+        </div>
+      `;
+      container.innerHTML = html;
+
+      document.getElementById('prevMonth').onclick = () => {
+        const nd = new Date(state.calendarDate);
+        nd.setMonth(nd.getMonth() - 1);
+        navigate('home', { calendarDate: nd.toISOString() });
+      };
+      document.getElementById('nextMonth').onclick = () => {
+        const nd = new Date(state.calendarDate);
+        nd.setMonth(nd.getMonth() + 1);
+        navigate('home', { calendarDate: nd.toISOString() });
+      };
+      document.getElementById('resetDate').onclick = () => navigate('home', { calendarDate: new Date().toISOString() });
+      document.getElementById('addBtnTop').onclick = () => navigate('add');
+
+      container.querySelectorAll('.calendar-cell').forEach(cell => {
+        cell.onclick = () => showDayDetail(cell.dataset.date);
+      });
+    }
+
+    function generateCalendarCells(year, month) {
+      const first = new Date(year, month, 1);
+      const startDay = first.getDay();
+      const last = new Date(year, month + 1, 0);
+      const today = getTodayStr();
+      
+      let html = '';
+      const startDate = new Date(year, month, 1 - startDay);
+
+      for (let i = 0; i < 42; i++) {
+        const current = new Date(startDate);
+        current.setDate(startDate.getDate() + i);
+        const dateStr = current.toISOString().split('T')[0];
+        const isCurrentMonth = current.getMonth() === month;
+        const isToday = dateStr === today;
+
+        const dayTasks = state.reviewTasks.filter(t => t.scheduledDate === dateStr);
+        const pendingReview = dayTasks.filter(t => t.status === 'pending' && t.type === 'review').length + (isToday ? state.reviewTasks.filter(t => t.scheduledDate < today && t.status === 'pending').length : 0);
+        const newStudy = dayTasks.filter(t => t.status === 'pending' && t.type === 'study').length;
+        const completed = dayTasks.filter(t => t.status === 'completed').length;
+
+        html += `
+          <div class="calendar-cell aspect-square bg-white flex flex-col items-center pt-1 relative active:bg-gray-100 transition-colors" data-date="${dateStr}">
+            <span class="text-sm h-7 w-7 flex items-center justify-center rounded-full ${isToday ? 'bg-[#007AFF] text-white font-bold' : isCurrentMonth ? 'text-black' : 'text-[#C6C6C8]'}">
+              ${current.getDate()}
+            </span>
+            <div class="mt-auto mb-1 flex flex-col items-center gap-0.5">
+              ${pendingReview > 0 ? `<div class="text-[8px] font-bold text-[#FF3B30]">• ${pendingReview}</div>` : ''}
+              ${newStudy > 0 ? `<div class="text-[8px] font-bold text-[#007AFF]">• ${newStudy}</div>` : ''}
+              ${completed > 0 ? `<div class="text-[8px] font-bold text-[#34C759]">✓ ${completed}</div>` : ''}
+            </div>
+          </div>
+        `;
+      }
+      return html;
+    }
+
+    function showDayDetail(dateStr) {
+      const overlay = document.createElement('div');
+      overlay.className = 'fixed inset-0 z-50 flex items-end sheet-overlay';
+      
+      const today = getTodayStr();
+      const isToday = dateStr === today;
+      const dayTasks = state.reviewTasks.filter(t => t.scheduledDate === dateStr || (isToday && t.scheduledDate < today && t.status === 'pending'));
+
+      overlay.innerHTML = `
+        <div class="w-full bg-[#F2F2F7] rounded-t-[24px] ios-shadow slide-up safe-area-bottom max-h-[70vh] flex flex-col overflow-hidden">
+          <div class="w-10 h-1.5 bg-[#C6C6C8] rounded-full mx-auto mt-3 mb-2"></div>
+          <div class="px-5 py-2 flex items-center justify-between border-b border-[#C6C6C8]/20">
+            <h2 class="text-xl font-bold">${dateStr} 任务</h2>
+            <button id="closeSheet" class="text-[#007AFF] font-bold">关闭</button>
+          </div>
+          <div class="flex-1 overflow-y-auto px-5 py-4 space-y-3 pb-20">
+            ${dayTasks.length > 0 ? dayTasks.map(t => {
+              const list = state.wordLists.find(l => l.id === t.listId);
+              return `
+                <div class="bg-white rounded-xl p-4 flex items-center justify-between ios-shadow">
+                  <div>
+                    <div class="flex gap-2 mb-1">
+                      <span class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${t.status === 'completed' ? 'bg-[#34C759]/10 text-[#34C759]' : 'bg-[#007AFF]/10 text-[#007AFF]'}">
+                        ${t.type === 'study' ? '新词学习' : '阶段复习 ' + t.stage}
+                      </span>
+                      ${t.scheduledDate < today && t.status === 'pending' ? '<span class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-[#FF3B30] text-white">逾期</span>' : ''}
+                    </div>
+                    <h4 class="font-bold">${list?.title || '未知列表'}</h4>
+                    <p class="text-xs text-[#8E8E93]">${list?.words.length} 词汇</p>
+                  </div>
+                  ${t.status === 'pending' ? `
+                    <button class="bg-[#007AFF] text-white px-4 py-2 rounded-full text-sm font-bold active:opacity-70 start-task-btn" data-tid="${t.id}" data-lid="${t.listId}">
+                      开始
+                    </button>
+                  ` : '<span class="text-[#34C759] font-bold text-sm">已完成</span>'}
+                </div>
+              `;
+            }).join('') : '<div class="text-center py-10 opacity-40">今日无任务</div>'}
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+
+      overlay.querySelector('#closeSheet').onclick = () => overlay.remove();
+      overlay.querySelectorAll('.start-task-btn').forEach(btn => {
+        btn.onclick = () => {
+          overlay.remove();
+          navigate('study', { activeTaskId: btn.dataset.tid, activeListId: btn.dataset.lid });
+        };
+      });
+    }
+
+    // --- 修复添加逻辑的 renderAdd 函数 ---
+    function renderAdd(container) {
+      // 核心状态：由 renderAdd 函数闭包维护，确保切换模式不丢失
+      let currentBuildingList = {
+        title: '',
+        description: '',
+        mode: 'single', // 'single' | 'batch'
+        words: [] // 单条模式下已暂存的词
+      };
+
+      // 实时保存标题和描述
+      const syncMetadata = () => {
+        const titleInput = document.getElementById('new-list-title');
+        const descInput = document.getElementById('new-list-desc');
+        if (titleInput) currentBuildingList.title = titleInput.value;
+        if (descInput) currentBuildingList.description = descInput.value;
+      };
+
+      // 模式切换保护逻辑
+      const toggleInputMode = (newMode) => {
+        syncMetadata(); // 切换前保存元数据
+        currentBuildingList.mode = newMode;
+        renderContent(); // 重新渲染，保持元数据
+      };
+
+      // 添加单词到预览列表 (逻辑修正)
+      const addWordToTemp = async () => {
+        const wordInput = document.querySelector('.word-input');
+        const defInput = document.querySelector('.def-input');
+        
+        if (wordInput && wordInput.value.trim()) {
+          currentBuildingList.words.push({
+            id: Date.now(),
+            word: wordInput.value.trim(),
+            definition: defInput.value.trim() || '暂无释义'
+          });
+          
+          // 仅清空单词和释义输入框，保留标题输入框
+          wordInput.value = '';
+          defInput.value = '';
+          
+          renderTempList(); // 仅局部渲染列表部分，或者完全 renderContent
+          syncMetadata(); 
+          renderContent(); 
+        }
+      };
+
+      // 渲染预览列表
+      const renderTempList = () => {
+        const container = document.getElementById('wordsContainer');
+        if (!container) return;
+        
+        if (currentBuildingList.mode === 'single') {
+          container.innerHTML = `
+            ${currentBuildingList.words.map((w, idx) => `
+              <div class="bg-white rounded-xl p-4 ios-shadow flex justify-between items-center mb-3 animate-in slide-in-from-bottom-2">
+                <div>
+                  <div class="text-lg font-bold">${w.word}</div>
+                  <div class="text-sm text-[#8E8E93]">${w.definition}</div>
+                </div>
+                <button class="remove-temp-word text-[#FF3B30] text-xs font-bold" data-idx="${idx}">移除</button>
+              </div>
+            `).join('')}
+            
+            <!-- 输入区域 -->
+            <div class="bg-white rounded-xl p-4 ios-shadow space-y-3 word-entry-card">
+              <div class="flex justify-between items-center">
+                <span class="text-[10px] font-black text-[#007AFF]">录入新词</span>
+              </div>
+              <input type="text" placeholder="单词" class="w-full text-lg font-bold outline-none border-b border-[#F2F2F7] word-input">
+              <textarea placeholder="释义 (失焦自动翻译)" class="w-full text-sm outline-none h-12 bg-[#F9F9F9] p-2 rounded-lg def-input"></textarea>
+              <button id="addWordToTempBtn" class="w-full py-3 bg-[#007AFF]/10 text-[#007AFF] rounded-lg font-bold text-sm">+ 添加该词</button>
+            </div>
+          `;
+
+          // 重新绑定事件
+          const wordIn = container.querySelector('.word-input');
+          const defIn = container.querySelector('.def-input');
+          wordIn.onblur = async () => {
+            if (wordIn.value && !defIn.value) {
+              defIn.placeholder = "翻译中...";
+              const trans = await autoTranslate(wordIn.value);
+              defIn.value = trans;
+            }
+          };
+          document.getElementById('addWordToTempBtn').onclick = addWordToTemp;
+          container.querySelectorAll('.remove-temp-word').forEach(btn => {
+            btn.onclick = () => {
+              currentBuildingList.words.splice(parseInt(btn.dataset.idx), 1);
+              renderContent();
+            };
+          });
+        } else {
+          container.innerHTML = `
+            <div class="bg-white rounded-xl p-4 ios-shadow">
+              <p class="text-[10px] text-[#8E8E93] mb-2">格式：单词 [空格] 释义，一行一个</p>
+              <textarea id="batchText" class="w-full h-64 bg-[#F9F9F9] p-3 rounded-lg outline-none font-mono text-sm" placeholder="Apple 苹果\nBanana 香蕉"></textarea>
+            </div>
+          `;
+        }
+      };
+
+      const renderContent = () => {
+        container.innerHTML = `
+          <div class="slide-up bg-[#F2F2F7] min-h-screen pb-32">
+            <header class="px-5 py-4 flex items-center justify-between border-b border-[#C6C6C8]/20 sticky top-0 bg-[#F2F2F7] z-50">
+              <button id="cancelAdd" class="text-[#007AFF]">取消</button>
+              <h1 class="text-lg font-bold">新建词单</h1>
+              <button id="saveList" class="text-[#007AFF] font-bold">保存</button>
+            </header>
+
+            <div class="px-5 mt-6 space-y-6">
+              <!-- 基础信息区 -->
+              <div class="bg-white rounded-xl overflow-hidden divide-y divide-[#C6C6C8]/30 ios-shadow">
+                <input id="new-list-title" type="text" placeholder="词单标题 (如: 雅思核心词)" class="w-full px-4 py-4 outline-none font-bold">
+                <input id="new-list-desc" type="text" placeholder="描述 (可选)" class="w-full px-4 py-3 outline-none text-sm text-[#8E8E93]">
+              </div>
+
+              <!-- 模式切换区 -->
+              <div class="flex bg-[#E5E5EA] p-1 rounded-lg">
+                <button id="modeSingle" class="flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${currentBuildingList.mode === 'single' ? 'bg-white ios-shadow text-black' : 'text-[#8E8E93]'}">逐条录入</button>
+                <button id="modeBatch" class="flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${currentBuildingList.mode === 'batch' ? 'bg-white ios-shadow text-black' : 'text-[#8E8E93]'}">批量导入</button>
+              </div>
+
+              <!-- 输入容器 -->
+              <div id="wordsContainer" class="space-y-4"></div>
+            </div>
+            
+            <div class="fixed bottom-10 left-0 right-0 p-5 safe-area-bottom">
+              <button id="finalSave" class="w-full py-4 bg-[#007AFF] text-white rounded-xl font-bold ios-shadow active:opacity-70">确认创建</button>
+            </div>
+          </div>
+        `;
+
+        // 重新渲染恢复：强制填入之前已保存的标题和描述
+        const titleInput = document.getElementById('new-list-title');
+        const descInput = document.getElementById('new-list-desc');
+        titleInput.value = currentBuildingList.title || '';
+        descInput.value = currentBuildingList.description || '';
+
+        // 绑定元数据实时同步事件
+        titleInput.oninput = syncMetadata;
+        descInput.oninput = syncMetadata;
+
+        // 绑定模式切换事件
+        document.getElementById('modeSingle').onclick = () => toggleInputMode('single');
+        document.getElementById('modeBatch').onclick = () => toggleInputMode('batch');
+        document.getElementById('cancelAdd').onclick = () => navigate('home');
+
+        const finalize = () => {
+          syncMetadata();
+          let finalWords = [];
+          if (currentBuildingList.mode === 'single') {
+            finalWords = [...currentBuildingList.words];
+            // 检查当前输入框中是否还有未提交的词
+            const wIn = container.querySelector('.word-input');
+            const dIn = container.querySelector('.def-input');
+            if (wIn && wIn.value.trim()) {
+              finalWords.push({ word: wIn.value.trim(), definition: dIn.value.trim() || '暂无释义' });
+            }
+          } else {
+            const text = document.getElementById('batchText').value;
+            text.split('\n').forEach(line => {
+              const parts = line.split(/\s+/);
+              if (parts[0]) finalWords.push({ word: parts[0], definition: parts.slice(1).join(' ') || '暂无释义' });
+            });
+          }
+
+          if (!currentBuildingList.title.trim() || finalWords.length === 0) {
+            alert('请填写词单标题并至少录入一个单词');
+            return;
+          }
+          createList(currentBuildingList.title, currentBuildingList.description, finalWords);
+        };
+
+        document.getElementById('saveList').onclick = finalize;
+        document.getElementById('finalSave').onclick = finalize;
+
+        renderTempList();
+      };
+
+      renderContent();
+    }
+
+    function renderStudy(container) {
+      const list = state.wordLists.find(l => l.id === state.activeListId);
+      const task = state.reviewTasks.find(t => t.id === state.activeTaskId);
+      if (!list) return navigate('home');
+
+      let currentIdx = 0;
+      let flipped = false;
+
+      const speak = (text) => {
+        if (!state.settings.autoTTS) return;
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = 'en-US';
+        u.rate = 0.9;
+        window.speechSynthesis.speak(u);
+      };
+
+      const renderCard = () => {
+        const word = list.words[currentIdx];
+        const progress = ((currentIdx + 1) / list.words.length) * 100;
+        
+        container.innerHTML = `
+          <div class="fixed inset-0 bg-[#F2F2F7] flex flex-col safe-area-top safe-area-bottom overflow-hidden">
+            <header class="px-5 py-3 flex items-center justify-between ios-blur border-b border-[#C6C6C8]/20 z-50">
+              <button id="exitStudy" class="text-[#007AFF] font-bold">退出</button>
+              <div class="flex-1 px-8"><div class="h-1.5 bg-[#E5E5EA] rounded-full overflow-hidden">
+                <div class="h-full bg-[#34C759] transition-all duration-300" style="width: ${progress}%"></div>
+              </div></div>
+              <span class="text-xs font-bold text-[#8E8E93] tabular-nums">${currentIdx + 1}/${list.words.length}</span>
+            </header>
+
+            <div class="px-5 py-3 flex justify-center gap-3 bg-white/50">
+              <button id="toggleTTS" class="px-3 py-1 rounded-full text-[10px] font-bold uppercase transition-colors ${state.settings.autoTTS ? 'bg-[#007AFF]/10 text-[#007AFF]' : 'bg-gray-200 text-gray-500'}">自动发音</button>
+              <button id="toggleOrder" class="px-3 py-1 rounded-full bg-gray-200 text-gray-700 text-[10px] font-bold uppercase">${state.settings.showWordFirst ? '先看单词' : '先看释义'}</button>
+            </div>
+
+            <div class="flex-1 flex items-center justify-center p-8 perspective-1000">
+              <div id="flipCard" class="relative w-full max-w-[340px] aspect-[4/5] preserve-3d transition-transform duration-500 ease-in-out cursor-pointer ${flipped ? 'rotate-y-180' : ''}">
+                <div class="absolute inset-0 bg-white rounded-[32px] ios-shadow flex flex-col items-center justify-center p-10 text-center backface-hidden border border-[#C6C6C8]/20">
+                   <span class="text-[10px] font-black text-[#C6C6C8] uppercase tracking-widest mb-6">${state.settings.showWordFirst ? 'Word' : 'Definition'}</span>
+                   <h2 class="font-extrabold ${state.settings.showWordFirst ? 'text-4xl' : 'text-xl'}">${state.settings.showWordFirst ? word.word : word.definition}</h2>
+                   <p class="text-[10px] text-[#8E8E93] mt-20 font-bold uppercase tracking-widest">点击翻转</p>
+                </div>
+                <div class="absolute inset-0 bg-white rounded-[32px] ios-shadow flex flex-col items-center justify-center p-10 text-center backface-hidden border border-[#C6C6C8]/20 rotate-y-180">
+                   <span class="text-[10px] font-black text-[#C6C6C8] uppercase tracking-widest mb-6">${state.settings.showWordFirst ? 'Definition' : 'Word'}</span>
+                   <h2 class="font-extrabold ${state.settings.showWordFirst ? 'text-xl' : 'text-4xl'}">${state.settings.showWordFirst ? word.definition : word.word}</h2>
+                   <p class="text-[10px] text-[#8E8E93] mt-20 font-bold uppercase tracking-widest">点击翻回</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="px-10 pb-16 pt-6 flex items-center justify-around gap-10">
+              <button id="btnWrong" class="w-20 h-20 rounded-full bg-white border-4 border-[#FF3B30]/10 flex items-center justify-center text-[#FF3B30] ios-shadow active:scale-90 transition-all">
+                <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+              <button id="btnCorrect" class="w-24 h-24 rounded-full bg-[#34C759] flex items-center justify-center text-white ios-shadow active:scale-90 transition-all">
+                <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="4" d="M5 13l4 4L19 7"/></svg>
+              </button>
+            </div>
+          </div>
+        `;
+
+        if (state.settings.autoTTS && state.settings.showWordFirst) speak(word.word);
+
+        document.getElementById('exitStudy').onclick = () => navigate('home');
+        document.getElementById('toggleTTS').onclick = () => { state.settings.autoTTS = !state.settings.autoTTS; saveState(); renderCard(); };
+        document.getElementById('toggleOrder').onclick = () => { state.settings.showWordFirst = !state.settings.showWordFirst; saveState(); renderCard(); };
+        
+        const flipCard = document.getElementById('flipCard');
+        flipCard.onclick = () => {
+          flipped = !flipped;
+          flipCard.classList.toggle('rotate-y-180');
+          if (flipped && !state.settings.showWordFirst && state.settings.autoTTS) speak(word.word);
+        };
+
+        const nextWord = () => {
+          if (currentIdx < list.words.length - 1) {
+            currentIdx++;
+            flipped = false;
+            renderCard();
+          } else {
+            if (task) task.status = 'completed';
+            saveState();
+            navigate('home');
+          }
+        };
+
+        document.getElementById('btnWrong').onclick = nextWord;
+        document.getElementById('btnCorrect').onclick = nextWord;
+      };
+
+      renderCard();
+    }
+
+    function renderLibrary(container) {
+      const html = `
+        <div class="animate-in fade-in duration-300">
+          <header class="px-5 pt-12 pb-4 flex justify-between items-center">
+            <h1 class="text-4xl font-extrabold">词库</h1>
+            <button id="libAdd" class="w-10 h-10 bg-[#007AFF] text-white rounded-full flex items-center justify-center ios-shadow"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M12 4v16m8-8H4"/></svg></button>
+          </header>
+          <div class="px-5 space-y-4 pb-24">
+            ${state.wordLists.length > 0 ? state.wordLists.map(l => `
+              <div class="bg-white rounded-2xl p-5 ios-shadow active:scale-95 transition-transform list-card" data-id="${l.id}">
+                <h3 class="font-bold text-xl">${l.title}</h3>
+                <p class="text-sm text-[#8E8E93] mt-1">${l.description || '无描述'}</p>
+                <div class="mt-4 flex items-center text-[10px] font-black uppercase text-[#8E8E93] gap-3">
+                  <span class="bg-gray-100 px-2 py-0.5 rounded">${l.words.length} WORDS</span>
+                  <span>${new Date(l.createdAt).toLocaleDateString()}</span>
+                </div>
+              </div>
+            `).join('') : '<div class="py-20 text-center opacity-40">暂无收藏词单</div>'}
+          </div>
+        </div>
+      `;
+      container.innerHTML = html;
+      document.getElementById('libAdd').onclick = () => navigate('add');
+    }
+
+    function createTabBar() {
+      const bar = document.createElement('nav');
+      bar.className = 'fixed bottom-0 left-0 right-0 ios-blur border-t border-[#C6C6C8]/30 safe-area-bottom h-16 flex items-center justify-around z-50';
+      bar.innerHTML = `
+        <button id="tabHome" class="flex flex-col items-center flex-1 transition-colors ${state.view === 'home' ? 'text-[#007AFF]' : 'text-[#8E8E93]'}">
+          <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3L4 9v12h5v-7h6v7h5V9z"/></svg>
+          <span class="text-[9px] font-bold mt-1">计划</span>
+        </button>
+        <button id="tabLib" class="flex flex-col items-center flex-1 transition-colors ${state.view === 'library' ? 'text-[#007AFF]' : 'text-[#8E8E93]'}">
+          <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/></svg>
+          <span class="text-[9px] font-bold mt-1">词库</span>
+        </button>
+      `;
+      bar.querySelector('#tabHome').onclick = () => navigate('home');
+      bar.querySelector('#tabLib').onclick = () => navigate('library');
+      return bar;
+    }
+
+    render();
+  </script>
+</body>
+</html>

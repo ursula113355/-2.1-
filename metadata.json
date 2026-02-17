@@ -1,0 +1,5 @@
+{
+  "name": "Daily Words - iOS Word Mastery",
+  "description": "An iOS-styled word learning application using the Ebbinghaus forgetting curve for optimal vocabulary retention.",
+  "requestFramePermissions": []
+}
