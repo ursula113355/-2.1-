@@ -30,7 +30,7 @@
     .ios-blur {
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
-      background: rgba(255, 255, 255, 0.8);
+      background: rgba(255, 255, 255, 0.95);
     }
 
     .safe-area-top { padding-top: env(safe-area-inset-top); }
@@ -56,7 +56,7 @@
       to { transform: translateY(0); }
     }
 
-    .ios-shadow { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
+    .ios-shadow { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12); }
 
     .calendar-grid {
       display: grid;
@@ -67,9 +67,14 @@
     }
 
     .sheet-overlay {
-      background-color: rgba(0,0,0,0.4);
+      background-color: rgba(0,0,0,0.5);
       transition: opacity 0.3s ease;
     }
+
+    /* 增强视觉对比 */
+    .text-review { color: var(--red); }
+    .text-study { color: var(--blue); }
+    .text-completed { color: var(--green); }
 
     ::-webkit-scrollbar { display: none; }
   </style>
@@ -88,7 +93,7 @@
 
   <script>
     // --- 状态管理 ---
-    const STORAGE_KEY = 'daily_words_data_v3';
+    const STORAGE_KEY = 'daily_words_data_v4';
     const EBBINGHAUS_INTERVALS = [0, 1, 2, 4, 7, 15, 30];
 
     let state = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {
@@ -104,7 +109,7 @@
       }
     };
 
-    // 修复标题丢失：全局存储当前正在编辑的词单状态
+    // 录入临时状态：修复标题丢失 Bug
     let currentBuildingList = {
       title: '',
       description: '',
@@ -116,8 +121,7 @@
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     }
 
-    // --- 修复日期判定逻辑 ---
-    // 确保返回本地时区的 YYYY-MM-DD，避免 UTC 偏移导致日期变昨天
+    // --- 日期逻辑修复 ---
     const getTodayStr = () => {
       const now = new Date();
       const y = now.getFullYear();
@@ -152,13 +156,12 @@
       const newList = { id: listId, title, description, words, createdAt: Date.now() };
       state.wordLists.push(newList);
 
-      // 修复任务生成起点：严格从本地“今天”开始
       const today = getTodayStr();
       EBBINGHAUS_INTERVALS.forEach((interval, stage) => {
         state.reviewTasks.push({
           id: `task_${listId}_${stage}`,
           listId: listId,
-          scheduledDate: addDays(today, interval), // 第0天即为今天
+          scheduledDate: addDays(today, interval),
           status: 'pending',
           type: stage === 0 ? 'study' : 'review',
           stage: stage
@@ -194,7 +197,7 @@
       }
     }
 
-    // --- 1. 计划/日历视图 ---
+    // --- 1. 计划/日历视图 (视觉深度优化) ---
     function renderHome(container) {
       const d = new Date(state.calendarDate);
       const year = d.getFullYear();
@@ -205,30 +208,30 @@
         <div class="animate-in fade-in duration-300">
           <header class="px-5 pt-10 pb-4 sticky top-0 bg-[#F2F2F7] z-40 border-b border-[#C6C6C8]/30">
             <div class="flex items-center justify-between">
-              <button id="prevMonth" class="p-2 text-[#007AFF]"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M15 19l-7-7 7-7"/></svg></button>
+              <button id="prevMonth" class="p-2 text-[#007AFF] active:opacity-50"><svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M15 19l-7-7 7-7"/></svg></button>
               <button id="resetDate" class="flex flex-col items-center">
-                <span class="text-lg font-bold">${year}年${month + 1}月</span>
-                <span class="text-[9px] font-black uppercase text-[#007AFF] tracking-wider">回到今天</span>
+                <span class="text-xl font-black text-black">${year}年${month + 1}月</span>
+                <span class="text-[11px] font-black uppercase text-[#007AFF] tracking-wider">回到今日</span>
               </button>
               <div class="flex items-center">
-                <button id="nextMonth" class="p-2 text-[#007AFF]"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M9 5l7 7-7 7"/></svg></button>
-                <button id="addBtnTop" class="ml-2 p-2 text-[#007AFF]"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M12 4v16m8-8H4"/></svg></button>
+                <button id="nextMonth" class="p-2 text-[#007AFF] active:opacity-50"><svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M9 5l7 7-7 7"/></svg></button>
+                <button id="addBtnTop" class="ml-2 p-2 text-[#007AFF] active:opacity-50"><svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M12 4v16m8-8H4"/></svg></button>
               </div>
             </div>
           </header>
 
-          <div class="grid grid-cols-7 px-4 mt-6 text-center text-[10px] font-bold text-[#8E8E93] uppercase">
+          <div class="grid grid-cols-7 px-4 mt-6 text-center text-[13px] font-black text-[#8E8E93] uppercase">
             <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
           </div>
 
-          <div class="calendar-grid mx-4 mt-2 rounded-2xl overflow-hidden bg-white ios-shadow">
+          <div class="calendar-grid mx-4 mt-3 rounded-2xl overflow-hidden bg-white ios-shadow border-[#C6C6C8]">
             ${generateCalendarCells(year, month)}
           </div>
 
-          <div class="px-8 py-6 flex justify-between">
-             <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full bg-[#FF3B30]"></div><span class="text-[10px] text-[#8E8E93] font-bold">待复习</span></div>
-             <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full bg-[#007AFF]"></div><span class="text-[10px] text-[#8E8E93] font-bold">新词</span></div>
-             <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full bg-[#34C759]"></div><span class="text-[10px] text-[#8E8E93] font-bold">已完成</span></div>
+          <div class="px-8 py-8 flex justify-between bg-white/50 mt-4 rounded-xl mx-4 ios-shadow">
+             <div class="flex flex-col items-center gap-1"><div class="w-4 h-4 rounded-full bg-[#FF3B30]"></div><span class="text-[12px] text-[#000] font-black">待复习</span></div>
+             <div class="flex flex-col items-center gap-1"><div class="w-4 h-4 rounded-full bg-[#007AFF]"></div><span class="text-[12px] text-[#000] font-black">新词</span></div>
+             <div class="flex flex-col items-center gap-1"><div class="w-4 h-4 rounded-full bg-[#34C759]"></div><span class="text-[12px] text-[#000] font-black">已完成</span></div>
           </div>
         </div>
       `;
@@ -251,11 +254,8 @@
     function generateCalendarCells(year, month) {
       const first = new Date(year, month, 1);
       const startDay = first.getDay();
-      const last = new Date(year, month + 1, 0);
-      const today = getTodayStr(); // 2024-03-17
+      const today = getTodayStr();
       let html = '';
-      
-      // 这里的起点日期需要精确对齐
       const startDate = new Date(year, month, 1 - startDay);
 
       for (let i = 0; i < 42; i++) {
@@ -268,7 +268,7 @@
         const dateStr = `${cy}-${cm}-${cd}`;
         
         const isCurrentMonth = current.getMonth() === month;
-        const isToday = dateStr === today; // 严格对比本地字符串
+        const isToday = dateStr === today;
 
         const dayTasks = state.reviewTasks.filter(t => t.scheduledDate === dateStr);
         const pendingReview = dayTasks.filter(t => t.status === 'pending' && t.type === 'review').length + (isToday ? state.reviewTasks.filter(t => t.scheduledDate < today && t.status === 'pending').length : 0);
@@ -276,14 +276,14 @@
         const completed = dayTasks.filter(t => t.status === 'completed').length;
 
         html += `
-          <div class="calendar-cell aspect-square bg-white flex flex-col items-center pt-1 relative active:bg-gray-100 transition-colors" data-date="${dateStr}">
-            <span class="text-sm h-7 w-7 flex items-center justify-center rounded-full ${isToday ? 'bg-[#007AFF] text-white font-bold' : isCurrentMonth ? 'text-black' : 'text-[#C6C6C8]'}">
+          <div class="calendar-cell aspect-square bg-white flex flex-col items-center justify-start pt-2 relative active:bg-gray-100 transition-colors cursor-pointer" data-date="${dateStr}">
+            <span class="text-[16px] h-9 w-9 flex items-center justify-center rounded-full font-black ${isToday ? 'bg-[#007AFF] text-white' : isCurrentMonth ? 'text-black' : 'text-[#C6C6C8]'}">
               ${current.getDate()}
             </span>
-            <div class="mt-auto mb-1 flex flex-col items-center gap-0.5">
-              ${pendingReview > 0 ? `<div class="text-[8px] font-bold text-[#FF3B30]">• ${pendingReview}</div>` : ''}
-              ${newStudy > 0 ? `<div class="text-[8px] font-bold text-[#007AFF]">• ${newStudy}</div>` : ''}
-              ${completed > 0 ? `<div class="text-[8px] font-bold text-[#34C759]">✓ ${completed}</div>` : ''}
+            <div class="mt-auto mb-1 flex flex-col items-center gap-0 w-full px-1">
+              ${pendingReview > 0 ? `<div class="text-[12px] font-black text-[#FF3B30] truncate">复习 ${pendingReview}</div>` : ''}
+              ${newStudy > 0 ? `<div class="text-[12px] font-black text-[#007AFF] truncate">新词 ${newStudy}</div>` : ''}
+              ${completed > 0 ? `<div class="text-[12px] font-black text-[#34C759] truncate">✓ ${completed}</div>` : ''}
             </div>
           </div>
         `;
@@ -293,52 +293,59 @@
 
     function showDayDetail(dateStr) {
       const overlay = document.createElement('div');
-      overlay.className = 'fixed inset-0 z-50 flex items-end sheet-overlay';
+      overlay.className = 'fixed inset-0 z-50 flex items-end sheet-overlay animate-in fade-in duration-200';
       const today = getTodayStr();
       const isToday = dateStr === today;
       const dayTasks = state.reviewTasks.filter(t => t.scheduledDate === dateStr || (isToday && t.scheduledDate < today && t.status === 'pending'));
 
       overlay.innerHTML = `
-        <div class="w-full bg-[#F2F2F7] rounded-t-[24px] ios-shadow slide-up safe-area-bottom max-h-[70vh] flex flex-col overflow-hidden">
-          <div class="w-10 h-1.5 bg-[#C6C6C8] rounded-full mx-auto mt-3 mb-2"></div>
-          <div class="px-5 py-2 flex items-center justify-between border-b border-[#C6C6C8]/20">
-            <h2 class="text-xl font-bold">${dateStr} 任务</h2>
-            <button id="closeSheet" class="text-[#007AFF] font-bold">关闭</button>
+        <div class="w-full bg-[#F2F2F7] rounded-t-[32px] ios-shadow slide-up safe-area-bottom max-h-[80vh] flex flex-col overflow-hidden">
+          <div class="w-12 h-1.5 bg-[#C6C6C8] rounded-full mx-auto mt-4 mb-2"></div>
+          <div class="px-6 py-3 flex items-center justify-between border-b border-[#C6C6C8]/30">
+            <h2 class="text-2xl font-black">${dateStr} 任务清单</h2>
+            <button id="closeSheet" class="text-[#007AFF] text-lg font-black">关闭</button>
           </div>
-          <div class="flex-1 overflow-y-auto px-5 py-4 space-y-3 pb-20">
+          <div class="flex-1 overflow-y-auto px-6 py-5 space-y-4 pb-24">
             ${dayTasks.length > 0 ? dayTasks.map(t => {
               const list = state.wordLists.find(l => l.id === t.listId);
               return `
-                <div class="bg-white rounded-xl p-4 flex items-center justify-between ios-shadow">
+                <div class="bg-white rounded-2xl p-5 flex items-center justify-between ios-shadow border border-[#C6C6C8]/20">
                   <div>
-                    <div class="flex gap-2 mb-1">
-                      <span class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${t.status === 'completed' ? 'bg-[#34C759]/10 text-[#34C759]' : 'bg-[#007AFF]/10 text-[#007AFF]'}">
-                        ${t.type === 'study' ? '新词学习' : '阶段复习 ' + t.stage}
+                    <div class="flex gap-2 mb-2">
+                      <span class="text-[11px] font-black uppercase px-2 py-1 rounded ${t.status === 'completed' ? 'bg-[#34C759] text-white' : t.type === 'study' ? 'bg-[#007AFF] text-white' : 'bg-[#FF3B30] text-white'}">
+                        ${t.type === 'study' ? '新词学习' : '复习阶段 ' + t.stage}
                       </span>
-                      ${t.scheduledDate < today && t.status === 'pending' ? '<span class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-[#FF3B30] text-white">逾期</span>' : ''}
+                      ${t.scheduledDate < today && t.status === 'pending' ? '<span class="text-[11px] font-black uppercase px-2 py-1 rounded bg-[#000] text-white">过期提醒</span>' : ''}
                     </div>
-                    <h4 class="font-bold">${list?.title || '未知词单'}</h4>
-                    <p class="text-xs text-[#8E8E93]">${list?.words.length} 个单词</p>
+                    <h4 class="text-lg font-black text-black">${list?.title || '未命名词单'}</h4>
+                    <p class="text-sm font-bold text-[#8E8E93]">${list?.words.length} 词汇</p>
                   </div>
                   ${t.status === 'pending' ? `
-                    <button class="bg-[#007AFF] text-white px-4 py-2 rounded-full text-sm font-bold active:opacity-70 start-task-btn" data-tid="${t.id}" data-lid="${t.listId}">
+                    <button class="bg-[#007AFF] text-white px-6 py-3 rounded-full text-base font-black active:scale-95 transition-transform start-task-btn" data-tid="${t.id}" data-lid="${t.listId}">
                       开始
                     </button>
-                  ` : '<span class="text-[#34C759] font-bold text-sm">已完成</span>'}
+                  ` : '<span class="text-[#34C759] font-black text-lg">已达成 ✓</span>'}
                 </div>
               `;
-            }).join('') : '<div class="text-center py-10 opacity-40">今日无任务</div>'}
+            }).join('') : '<div class="text-center py-16 opacity-40 font-bold text-lg">🎉 暂无待办任务</div>'}
           </div>
         </div>
       `;
       document.body.appendChild(overlay);
       overlay.querySelector('#closeSheet').onclick = () => overlay.remove();
+      overlay.querySelector('.sheet-overlay > div')?.onclick = (e) => e.stopPropagation();
+      overlay.onclick = () => overlay.remove();
+
       overlay.querySelectorAll('.start-task-btn').forEach(btn => {
-        btn.onclick = () => { overlay.remove(); navigate('study', { activeTaskId: btn.dataset.tid, activeListId: btn.dataset.lid }); };
+        btn.onclick = (e) => { 
+          e.stopPropagation();
+          overlay.remove(); 
+          navigate('study', { activeTaskId: btn.dataset.tid, activeListId: btn.dataset.lid }); 
+        };
       });
     }
 
-    // --- 2. 录入视图 (包含修复 Bug) ---
+    // --- 2. 录入视图 (修复标题丢失与全量汉化) ---
     function renderAdd(container) {
       const syncMetadata = () => {
         const titleInput = document.getElementById('new-list-title');
@@ -376,19 +383,19 @@
         if (currentBuildingList.mode === 'single') {
           wordsContainer.innerHTML = `
             ${currentBuildingList.words.map((w, idx) => `
-              <div class="bg-white rounded-xl p-4 ios-shadow flex justify-between items-center mb-3">
+              <div class="bg-white rounded-2xl p-4 ios-shadow flex justify-between items-center mb-3 border border-[#C6C6C8]/10">
                 <div>
-                  <div class="text-lg font-bold">${w.word}</div>
-                  <div class="text-sm text-[#8E8E93]">${w.definition}</div>
+                  <div class="text-lg font-black text-black">${w.word}</div>
+                  <div class="text-sm font-bold text-[#8E8E93]">${w.definition}</div>
                 </div>
-                <button class="remove-temp-word text-[#FF3B30] text-xs font-bold" data-idx="${idx}">移除</button>
+                <button class="remove-temp-word text-[#FF3B30] text-sm font-black px-3 py-1 bg-[#FF3B30]/10 rounded-full" data-idx="${idx}">移除</button>
               </div>
             `).join('')}
             
-            <div class="bg-white rounded-xl p-5 ios-shadow space-y-4 border-2 border-[#007AFF]/10">
-              <input id="temp-word" type="text" placeholder="英文单词" class="w-full text-lg font-bold outline-none border-b border-[#F2F2F7] pb-1">
-              <textarea id="temp-def" placeholder="中文释义 (自动翻译)" class="w-full text-sm outline-none h-16 bg-[#F9F9F9] p-3 rounded-xl"></textarea>
-              <button id="addWordToTempBtn" class="w-full py-3 bg-[#007AFF]/10 text-[#007AFF] rounded-xl font-bold text-sm">+ 添加该词</button>
+            <div class="bg-white rounded-2xl p-6 ios-shadow space-y-4 border-2 border-[#007AFF]/20">
+              <input id="temp-word" type="text" placeholder="输入英文单词" class="w-full text-xl font-black outline-none border-b border-[#F2F2F7] pb-2">
+              <textarea id="temp-def" placeholder="中文释义 (失焦自动翻译)" class="w-full text-base font-bold outline-none h-20 bg-[#F9F9F9] p-4 rounded-2xl"></textarea>
+              <button id="addWordToTempBtn" class="w-full py-4 bg-[#007AFF] text-white rounded-2xl font-black text-lg active:scale-95 transition-transform">+ 添加到词单</button>
             </div>
           `;
 
@@ -407,9 +414,9 @@
           });
         } else {
           wordsContainer.innerHTML = `
-            <div class="bg-white rounded-xl p-4 ios-shadow">
-              <p class="text-[10px] text-[#8E8E93] mb-2">格式：单词 [空格] 释义，一行一个</p>
-              <textarea id="batchText" class="w-full h-64 bg-[#F9F9F9] p-3 rounded-lg outline-none font-mono text-sm" placeholder="Apple 苹果\nBanana 香蕉"></textarea>
+            <div class="bg-white rounded-2xl p-5 ios-shadow space-y-3">
+              <p class="text-xs font-black text-[#8E8E93] uppercase">格式：单词 [空格] 释义，一行一个</p>
+              <textarea id="batchText" class="w-full h-72 bg-[#F9F9F9] p-4 rounded-2xl outline-none font-mono text-base font-bold" placeholder="Apple 苹果\nBanana 香蕉"></textarea>
             </div>
           `;
         }
@@ -417,25 +424,29 @@
 
       const renderContent = () => {
         container.innerHTML = `
-          <div class="slide-up bg-[#F2F2F7] min-h-screen pb-32">
-            <header class="px-5 py-4 flex items-center justify-between border-b border-[#C6C6C8]/20 sticky top-0 bg-[#F2F2F7] z-50">
-              <button id="cancelAdd" class="text-[#007AFF] font-medium">取消</button>
-              <h1 class="text-lg font-bold">新建词单</h1>
-              <button id="saveList" class="text-[#007AFF] font-bold">保存</button>
+          <div class="slide-up bg-[#F2F2F7] min-h-screen pb-40">
+            <header class="px-6 py-5 flex items-center justify-between border-b border-[#C6C6C8]/30 sticky top-0 bg-[#F2F2F7] z-50">
+              <button id="cancelAdd" class="text-[#007AFF] text-lg font-black">取消</button>
+              <h1 class="text-xl font-black">新建词单</h1>
+              <button id="saveList" class="text-[#007AFF] text-lg font-black">保存</button>
             </header>
 
-            <div class="px-5 mt-6 space-y-6">
-              <div class="bg-white rounded-xl overflow-hidden divide-y divide-[#C6C6C8]/30 ios-shadow">
-                <input id="new-list-title" type="text" placeholder="标题 (如: 雅思核心)" class="w-full px-4 py-4 outline-none font-bold">
-                <input id="new-list-desc" type="text" placeholder="描述 (可选)" class="w-full px-4 py-3 outline-none text-sm text-[#8E8E93]">
+            <div class="px-6 mt-8 space-y-8">
+              <div class="bg-white rounded-2xl overflow-hidden divide-y divide-[#C6C6C8]/30 ios-shadow">
+                <input id="new-list-title" type="text" placeholder="词单名称 (如: 雅思核心)" class="w-full px-5 py-5 outline-none font-black text-xl">
+                <input id="new-list-desc" type="text" placeholder="描述信息 (可选)" class="w-full px-5 py-4 outline-none text-base font-bold text-[#8E8E93]">
               </div>
 
-              <div class="flex bg-[#E5E5EA] p-1 rounded-lg">
-                <button id="modeSingle" class="flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${currentBuildingList.mode === 'single' ? 'bg-white ios-shadow text-black' : 'text-[#8E8E93]'}">逐条录入</button>
-                <button id="modeBatch" class="flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${currentBuildingList.mode === 'batch' ? 'bg-white ios-shadow text-black' : 'text-[#8E8E93]'}">批量导入</button>
+              <div class="flex bg-[#E5E5EA] p-1.5 rounded-2xl">
+                <button id="modeSingle" class="flex-1 py-2.5 text-sm font-black rounded-xl transition-all ${currentBuildingList.mode === 'single' ? 'bg-white ios-shadow text-black' : 'text-[#8E8E93]'}">逐条手动</button>
+                <button id="modeBatch" class="flex-1 py-2.5 text-sm font-black rounded-xl transition-all ${currentBuildingList.mode === 'batch' ? 'bg-white ios-shadow text-black' : 'text-[#8E8E93]'}">批量导入</button>
               </div>
 
-              <div id="wordsContainer" class="space-y-4"></div>
+              <div id="wordsContainer" class="space-y-6"></div>
+            </div>
+            
+            <div class="fixed bottom-10 left-0 right-0 px-6 safe-area-bottom z-50">
+              <button id="finalSave" class="w-full py-5 bg-[#007AFF] text-white rounded-[24px] font-black text-xl ios-shadow active:scale-95 transition-transform">确认创建并生成计划</button>
             </div>
           </div>
         `;
@@ -445,14 +456,13 @@
         titleInput.value = currentBuildingList.title || '';
         descInput.value = currentBuildingList.description || '';
         
-        // 实时保存逻辑
         titleInput.oninput = syncMetadata;
         descInput.oninput = syncMetadata;
 
         document.getElementById('modeSingle').onclick = () => toggleInputMode('single');
         document.getElementById('modeBatch').onclick = () => toggleInputMode('batch');
         document.getElementById('cancelAdd').onclick = () => {
-          if(confirm("确定要取消吗？")) {
+          if(confirm("确定要放弃吗？所有输入将不会保存。")) {
             currentBuildingList = { title: '', description: '', mode: 'single', words: [] };
             navigate('home');
           }
@@ -474,10 +484,11 @@
             });
           }
 
-          if (!currentBuildingList.title.trim() || finalWords.length === 0) return alert('标题或内容为空');
+          if (!currentBuildingList.title.trim() || finalWords.length === 0) return alert('请确保标题不为空，且至少录入一个单词。');
           createList(currentBuildingList.title, currentBuildingList.description, finalWords);
         };
         document.getElementById('saveList').onclick = finalize;
+        document.getElementById('finalSave').onclick = finalize;
         renderTempList();
       };
       renderContent();
@@ -497,7 +508,7 @@
         window.speechSynthesis.cancel();
         const u = new SpeechSynthesisUtterance(text);
         u.lang = 'en-US';
-        u.rate = 0.9;
+        u.rate = 0.95;
         window.speechSynthesis.speak(u);
       };
 
@@ -507,36 +518,47 @@
         
         container.innerHTML = `
           <div class="fixed inset-0 bg-[#F2F2F7] flex flex-col safe-area-top safe-area-bottom overflow-hidden">
-            <header class="px-5 py-3 flex items-center justify-between ios-blur border-b border-[#C6C6C8]/20 z-50">
-              <button id="exitStudy" class="text-[#007AFF] font-bold">退出</button>
-              <div class="flex-1 px-8"><div class="h-1.5 bg-[#E5E5EA] rounded-full overflow-hidden">
-                <div class="h-full bg-[#34C759] transition-all duration-300" style="width: ${progress}%"></div>
-              </div></div>
-              <span class="text-xs font-bold text-[#8E8E93] tabular-nums">${currentIdx + 1}/${list.words.length}</span>
+            <header class="px-6 py-4 flex items-center justify-between ios-blur border-b border-[#C6C6C8]/30 z-50">
+              <button id="exitStudy" class="text-[#007AFF] font-black text-lg">退出</button>
+              <div class="flex-1 px-10">
+                <div class="h-2.5 bg-[#E5E5EA] rounded-full overflow-hidden">
+                  <div class="h-full bg-[#34C759] transition-all duration-300" style="width: ${progress}%"></div>
+                </div>
+              </div>
+              <span class="text-sm font-black text-[#8E8E93] tabular-nums">${currentIdx + 1}/${list.words.length}</span>
             </header>
 
-            <div class="px-5 py-3 flex justify-center gap-3 bg-white/50">
-              <button id="toggleTTS" class="px-3 py-1 rounded-full text-[10px] font-bold uppercase transition-colors ${state.settings.autoTTS ? 'bg-[#007AFF]/10 text-[#007AFF]' : 'bg-gray-200 text-gray-500'}">发音开</button>
-              <button id="toggleOrder" class="px-3 py-1 rounded-full bg-gray-200 text-gray-700 text-[10px] font-bold uppercase">${state.settings.showWordFirst ? '先看单词' : '先看释义'}</button>
+            <div class="px-6 py-4 flex justify-center gap-4 bg-white/50">
+              <button id="toggleTTS" class="px-4 py-2 rounded-full text-[12px] font-black uppercase transition-colors ${state.settings.autoTTS ? 'bg-[#007AFF] text-white' : 'bg-gray-300 text-gray-700'}">自动发音</button>
+              <button id="toggleOrder" class="px-4 py-2 rounded-full bg-gray-200 text-black text-[12px] font-black uppercase">${state.settings.showWordFirst ? '先看单词' : '先看释义'}</button>
             </div>
 
             <div class="flex-1 flex items-center justify-center p-8 perspective-1000">
-              <div id="flipCard" class="relative w-full max-w-[340px] aspect-[4/5] preserve-3d transition-transform duration-500 ease-in-out cursor-pointer ${flipped ? 'rotate-y-180' : ''}">
-                <div class="absolute inset-0 bg-white rounded-[32px] ios-shadow flex flex-col items-center justify-center p-10 text-center backface-hidden border border-[#C6C6C8]/20">
-                   <h2 class="font-extrabold ${state.settings.showWordFirst ? 'text-4xl' : 'text-xl'}">${state.settings.showWordFirst ? word.word : word.definition}</h2>
+              <div id="flipCard" class="relative w-full max-w-[360px] aspect-[4/5] preserve-3d transition-transform duration-500 ease-in-out cursor-pointer ${flipped ? 'rotate-y-180' : ''}">
+                <div class="absolute inset-0 bg-white rounded-[40px] ios-shadow flex flex-col items-center justify-center p-10 text-center backface-hidden border-2 border-[#C6C6C8]/20">
+                   <span class="text-[12px] font-black text-[#C6C6C8] uppercase tracking-widest mb-10">${state.settings.showWordFirst ? '单词' : '释义'}</span>
+                   <h2 class="font-black leading-tight ${state.settings.showWordFirst ? 'text-5xl' : 'text-2xl text-review'}">${state.settings.showWordFirst ? word.word : word.definition}</h2>
+                   <div class="mt-20 flex flex-col items-center opacity-30">
+                     <svg class="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+                     <span class="text-[11px] font-black uppercase tracking-widest">点击翻转</span>
+                   </div>
                 </div>
-                <div class="absolute inset-0 bg-white rounded-[32px] ios-shadow flex flex-col items-center justify-center p-10 text-center backface-hidden border border-[#C6C6C8]/20 rotate-y-180">
-                   <h2 class="font-extrabold ${state.settings.showWordFirst ? 'text-xl' : 'text-4xl'}">${state.settings.showWordFirst ? word.definition : word.word}</h2>
+                <div class="absolute inset-0 bg-white rounded-[40px] ios-shadow flex flex-col items-center justify-center p-10 text-center backface-hidden border-2 border-[#C6C6C8]/20 rotate-y-180">
+                   <span class="text-[12px] font-black text-[#C6C6C8] uppercase tracking-widest mb-10">${state.settings.showWordFirst ? '释义' : '单词'}</span>
+                   <h2 class="font-black leading-tight ${state.settings.showWordFirst ? 'text-2xl text-review' : 'text-5xl'}">${state.settings.showWordFirst ? word.definition : word.word}</h2>
+                   <button id="cardSpeakBtn" class="mt-16 w-14 h-14 bg-[#007AFF]/10 rounded-full flex items-center justify-center text-[#007AFF]">
+                     <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+                   </button>
                 </div>
               </div>
             </div>
 
-            <div class="px-10 pb-16 pt-6 flex items-center justify-around gap-10">
-              <button id="btnWrong" class="w-20 h-20 rounded-full bg-white border-4 border-[#FF3B30]/10 flex items-center justify-center text-[#FF3B30] active:scale-90 transition-all">
-                <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M6 18L18 6M6 6l12 12"/></svg>
+            <div class="px-12 pb-20 pt-8 flex items-center justify-around gap-12">
+              <button id="btnWrong" class="w-24 h-24 rounded-full bg-white border-[6px] border-[#FF3B30]/20 flex items-center justify-center text-[#FF3B30] ios-shadow active:scale-90 transition-all">
+                <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="4" d="M6 18L18 6M6 6l12 12"/></svg>
               </button>
-              <button id="btnCorrect" class="w-24 h-24 rounded-full bg-[#34C759] flex items-center justify-center text-white active:scale-90 transition-all">
-                <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="4" d="M5 13l4 4L19 7"/></svg>
+              <button id="btnCorrect" class="w-28 h-28 rounded-full bg-[#34C759] flex items-center justify-center text-white ios-shadow active:scale-90 transition-all shadow-[0_12px_24px_rgba(52,199,89,0.4)]">
+                <svg class="w-14 h-14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="5" d="M5 13l4 4L19 7"/></svg>
               </button>
             </div>
           </div>
@@ -544,7 +566,7 @@
 
         if (state.settings.autoTTS && state.settings.showWordFirst) speak(word.word);
 
-        document.getElementById('exitStudy').onclick = () => navigate('home');
+        document.getElementById('exitStudy').onclick = () => { if(confirm("确定要退出复习吗？当前进度不会保存。")) navigate('home'); };
         document.getElementById('toggleTTS').onclick = () => { state.settings.autoTTS = !state.settings.autoTTS; saveState(); renderCard(); };
         document.getElementById('toggleOrder').onclick = () => { state.settings.showWordFirst = !state.settings.showWordFirst; saveState(); renderCard(); };
         
@@ -554,6 +576,11 @@
           flipCard.classList.toggle('rotate-y-180');
           if (flipped && !state.settings.showWordFirst && state.settings.autoTTS) speak(word.word);
         };
+        
+        const speakBtn = document.getElementById('cardSpeakBtn');
+        if (speakBtn) {
+          speakBtn.onclick = (e) => { e.stopPropagation(); speak(word.word); };
+        }
 
         const handleNext = (known) => {
           const card = document.getElementById('flipCard');
@@ -566,9 +593,10 @@
             } else {
               if (task) task.status = 'completed';
               saveState();
+              alert("太棒了！你已完成本次词单的学习任务。");
               navigate('home');
             }
-          }, 300);
+          }, 350);
         };
 
         document.getElementById('btnWrong').onclick = () => handleNext(false);
@@ -581,23 +609,26 @@
     function renderLibrary(container) {
       container.innerHTML = `
         <div class="animate-in fade-in duration-300">
-          <header class="px-5 pt-12 pb-4 flex justify-between items-center">
-            <h1 class="text-4xl font-extrabold">词库</h1>
-            <button id="libAdd" class="w-10 h-10 bg-[#007AFF] text-white rounded-full flex items-center justify-center ios-shadow"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M12 4v16m8-8H4"/></svg></button>
+          <header class="px-6 pt-12 pb-5 flex justify-between items-center">
+            <h1 class="text-5xl font-black">词库</h1>
+            <button id="libAdd" class="w-12 h-12 bg-[#007AFF] text-white rounded-full flex items-center justify-center ios-shadow active:scale-90 transition-transform"><svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M12 4v16m8-8H4"/></svg></button>
           </header>
-          <div class="px-5 space-y-4 pb-32">
+          <div class="px-6 space-y-5 pb-40">
             ${state.wordLists.length > 0 ? state.wordLists.map(l => `
-              <div class="bg-white rounded-2xl p-5 ios-shadow active:scale-95 transition-transform" data-id="${l.id}">
+              <div class="bg-white rounded-[32px] p-7 ios-shadow active:scale-95 transition-transform border border-[#C6C6C8]/20" data-id="${l.id}">
                 <div class="flex justify-between items-start">
-                   <h3 class="font-bold text-xl">${l.title}</h3>
-                   <button class="delete-list text-[#FF3B30] p-1" data-id="${l.id}"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+                   <h3 class="font-black text-2xl text-black">${l.title}</h3>
+                   <button class="delete-list text-[#FF3B30] p-2 bg-[#FF3B30]/10 rounded-full" data-id="${l.id}">
+                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                   </button>
                 </div>
-                <p class="text-sm text-[#8E8E93] mt-1">${l.description || ''}</p>
-                <div class="mt-4 flex items-center text-[10px] font-black uppercase text-[#8E8E93] gap-3">
-                  <span class="bg-gray-100 px-2 py-0.5 rounded">${l.words.length} 词</span>
+                <p class="text-base font-bold text-[#8E8E93] mt-2 line-clamp-2">${l.description || '暂无详细描述'}</p>
+                <div class="mt-6 flex items-center text-[11px] font-black uppercase text-[#8E8E93] gap-4">
+                  <span class="bg-[#F2F2F7] text-black px-3 py-1 rounded-full">${l.words.length} 词汇</span>
+                  <span>创建于 ${new Date(l.createdAt).toLocaleDateString()}</span>
                 </div>
               </div>
-            `).join('') : '<div class="py-20 text-center opacity-40">词库空空如也</div>'}
+            `).join('') : '<div class="py-24 text-center opacity-30 font-black text-2xl">词库空空如也</div>'}
           </div>
         </div>
       `;
@@ -605,7 +636,7 @@
       container.querySelectorAll('.delete-list').forEach(btn => {
         btn.onclick = (e) => {
           e.stopPropagation();
-          if(confirm("确定删除吗？")) {
+          if(confirm("确定要永久删除这个词单吗？相关复习记录也将被抹除。")) {
             state.wordLists = state.wordLists.filter(l => l.id !== btn.dataset.id);
             state.reviewTasks = state.reviewTasks.filter(t => t.listId !== btn.dataset.id);
             saveState();
@@ -615,17 +646,18 @@
       });
     }
 
+    // --- Tab Bar ---
     function createTabBar() {
       const bar = document.createElement('nav');
-      bar.className = 'fixed bottom-0 left-0 right-0 ios-blur border-t border-[#C6C6C8]/30 safe-area-bottom h-16 flex items-center justify-around z-50';
+      bar.className = 'fixed bottom-0 left-0 right-0 ios-blur border-t border-[#C6C6C8]/40 safe-area-bottom h-20 flex items-center justify-around z-50';
       bar.innerHTML = `
-        <button id="tabHome" class="flex flex-col items-center flex-1 transition-colors ${state.view === 'home' ? 'text-[#007AFF]' : 'text-[#8E8E93]'}">
-          <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3L4 9v12h5v-7h6v7h5V9z"/></svg>
-          <span class="text-[9px] font-bold mt-1">计划</span>
+        <button id="tabHome" class="flex flex-col items-center flex-1 transition-all ${state.view === 'home' ? 'text-[#007AFF] scale-110' : 'text-[#8E8E93]'}">
+          <svg class="w-7 h-7" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3L4 9v12h5v-7h6v7h5V9z"/></svg>
+          <span class="text-[11px] font-black mt-1">学习计划</span>
         </button>
-        <button id="tabLib" class="flex flex-col items-center flex-1 transition-colors ${state.view === 'library' ? 'text-[#007AFF]' : 'text-[#8E8E93]'}">
-          <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/></svg>
-          <span class="text-[9px] font-bold mt-1">词库</span>
+        <button id="tabLib" class="flex flex-col items-center flex-1 transition-all ${state.view === 'library' ? 'text-[#007AFF] scale-110' : 'text-[#8E8E93]'}">
+          <svg class="w-7 h-7" fill="currentColor" viewBox="0 0 24 24"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/></svg>
+          <span class="text-[11px] font-black mt-1">我的词库</span>
         </button>
       `;
       bar.querySelector('#tabHome').onclick = () => navigate('home');
@@ -633,6 +665,7 @@
       return bar;
     }
 
+    // 启动应用
     render();
   </script>
 </body>
